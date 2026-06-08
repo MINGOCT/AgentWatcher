@@ -1,0 +1,22 @@
+{
+  "name": "AgentWatcher",
+  "version": "0.1.0+codex.20260608113703",
+  "description": "Send compact Codex approval, completion, test, attention, and Desktop watcher fallback notifications to iPhone and Apple Watch through Bark.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AgentWatcher",
+    "shortDescription": "Send compact Codex notifications through Bark.",
+    "longDescription": "Send compact actionable Codex notifications to iPhone and Apple Watch through Bark when Codex waits for approval, finishes work, completes tests, or needs user attention. Includes a Desktop watcher fallback for automatic task-complete notifications when Stop hooks do not fire.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Bark notifications",
+      "Codex hook alerts",
+      "Desktop task-complete watcher"
+    ],
+    "defaultPrompt": "Notify me through AgentWatcher when Codex needs approval, finishes work, completes tests, or needs my attention."
+  }
+}

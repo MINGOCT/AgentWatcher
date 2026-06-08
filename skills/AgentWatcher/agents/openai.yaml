@@ -1,0 +1,4 @@
+interface:
+  display_name: AgentWatcher
+  short_description: Send compact Codex notifications through Bark.
+  default_prompt: Notify me through AgentWatcher when Codex needs approval, finishes work, completes tests, or needs my attention.

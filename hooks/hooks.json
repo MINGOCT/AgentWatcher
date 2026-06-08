@@ -1,0 +1,45 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/codex_bark_notify.py\" hook --event PermissionRequest",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\invoke_codex_bark_notify.ps1') -Event PermissionRequest\"",
+            "timeout": 15,
+            "statusMessage": "Sending Bark approval notification"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/codex_bark_notify.py\" hook --event Stop",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\invoke_codex_bark_notify.ps1') -Event Stop\"",
+            "timeout": 15,
+            "statusMessage": "Sending Bark completion notification"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|shell_command|apply_patch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/codex_bark_notify.py\" hook --event PostToolUse",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\invoke_codex_bark_notify.ps1') -Event PostToolUse\"",
+            "timeout": 15,
+            "statusMessage": "Checking whether Bark notification is needed"
+          }
+        ]
+      }
+    ]
+  }
+}

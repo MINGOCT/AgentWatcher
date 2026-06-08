@@ -1,0 +1,39 @@
+{
+  "notifier": {
+    "type": "bark",
+    "bark_server": "https://api.day.app",
+    "bark_key": "",
+    "group": "AgentWatcher",
+    "default_level": "active",
+    "permission_level": "timeSensitive"
+  },
+  "notification_policy": {
+    "mode": "actionable",
+    "notify_on_permission_request": true,
+    "notify_on_stop": true,
+    "notify_on_test_done": true,
+    "notify_on_consecutive_failures": true,
+    "consecutive_failure_threshold": 3,
+    "cooldown_seconds": 45,
+    "test_command_patterns": [
+      "npm test",
+      "npm run test",
+      "pnpm test",
+      "pnpm run test",
+      "yarn test",
+      "pytest",
+      "python -m unittest",
+      "python -m pytest",
+      "go test",
+      "cargo test",
+      "dotnet test"
+    ]
+  },
+  "privacy": {
+    "max_body_chars": 96,
+    "summary_style": "compact",
+    "redact_secrets": true,
+    "include_cwd": false,
+    "include_command_preview": true
+  }
+}
