@@ -1,6 +1,10 @@
 # AgentWatcher 中文使用说明
 
-`AgentWatcher` 通过 Bark 把 Codex 的待批准、任务完成、测试完成等通知推送到 iPhone，并可同步到 Apple Watch。
+`AgentWatcher` 是一个适用于 Codex 的本地通知插件。它通过 Bark 将 Codex 的关键状态推送到 iPhone，并可同步到 Apple Watch。
+
+它支持 Codex hooks 和 Desktop watcher 两层通知机制：当 Codex 等待批准、任务完成、测试命令结束，或 Desktop 会话产生 `task_complete` 事件时，AgentWatcher 会自动发送简短、可读、适合锁屏和 Apple Watch 的通知摘要。
+
+适合 Codex 长时间运行任务、测试或自动化工作时，不用一直盯着电脑，只在需要回来处理时收到提醒的用户。
 
 ## 快速使用
 
