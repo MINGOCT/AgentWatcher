@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import hashlib
 import json
 import os
 import re
@@ -64,6 +66,24 @@ SECRET_PATTERNS = [
     re.compile(r"xox[baprs]-[A-Za-z0-9-]+"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----"),
+]
+
+MOJIBAKE_MARKERS = [
+    "锟",
+    "�",
+    "宸插",
+    "浠诲",
+    "鏈",
+    "缁撴",
+    "鍔ㄤ綔",
+    "闇€",
+    "楠屾",
+    "鍥炴",
+    "娴嬭",
+    "鎽",
+    "鐢",
+    "鍙",
+    "寰",
 ]
 
 
@@ -154,9 +174,56 @@ def truncate_text(text: str, limit: int) -> str:
     return text[: limit - len(suffix)] + suffix
 
 
+def mojibake_score(text: str) -> int:
+    score = 0
+    for marker in MOJIBAKE_MARKERS:
+        score += text.count(marker) * 3
+    score += text.count("�") * 5
+    return score
+
+
+def recover_mojibake_text(text: str) -> str:
+    raw = str(text or "")
+    if not raw:
+        return ""
+
+    best = raw
+    best_score = mojibake_score(raw)
+    for encoding in ("gbk", "cp936", "latin1", "cp1252"):
+        try:
+            recovered = raw.encode(encoding).decode("utf-8-sig")
+        except UnicodeError:
+            continue
+        score = mojibake_score(recovered)
+        if score < best_score:
+            best = recovered
+            best_score = score
+    return best
+
+
+def looks_like_machine_json(text: str) -> bool:
+    stripped = text.strip()
+    if len(stripped) < 2 or stripped[0] not in "[{" or stripped[-1] not in "]}":
+        return False
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(parsed, (dict, list))
+
+
+def looks_corrupt_text(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    question_count = stripped.count("?")
+    return question_count >= 4 and question_count >= max(4, len(stripped) // 3)
+
+
 def compact_text_summary(text: str, limit: int = 36) -> str:
-    normalized = " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split())
-    if not normalized:
+    recovered = recover_mojibake_text(str(text or ""))
+    normalized = " ".join(recovered.replace("\r", " ").replace("\n", " ").split())
+    if not normalized or looks_like_machine_json(normalized) or looks_corrupt_text(normalized):
         return "本轮任务"
     first_sentence = re.split(r"[。！？!?]\s*", normalized, maxsplit=1)[0].strip()
     return truncate_text(first_sentence or normalized, limit)
@@ -419,13 +486,33 @@ def bark_url(title: str, body: str, level: str, notifier: dict[str, Any]) -> str
     return f"{server}/{key}/{title_q}/{body_q}?{query}"
 
 
+def bark_endpoint(notifier: dict[str, Any]) -> str:
+    server = str(notifier.get("bark_server", "https://api.day.app")).rstrip("/")
+    key = str(notifier.get("bark_key", "")).strip()
+    return f"{server}/{key}"
+
+
 def send_bark(title: str, body: str, level: str, notifier: dict[str, Any]) -> bool:
     key = str(notifier.get("bark_key", "")).strip()
     if not key:
         print("[AgentWatcher] Bark key is not configured.", file=sys.stderr)
         return False
     try:
-        req = urllib.request.Request(bark_url(title, body, level, notifier), method="GET")
+        payload = json.dumps(
+            {
+                "title": title,
+                "body": body,
+                "group": str(notifier.get("group", "Codex")),
+                "level": level,
+            },
+            ensure_ascii=True,
+        ).encode("ascii")
+        req = urllib.request.Request(
+            bark_endpoint(notifier),
+            data=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=10) as response:
             text = response.read().decode("utf-8", errors="replace")
             try:
@@ -466,6 +553,34 @@ def mark_sent(data_dir: Path, event_type: str) -> None:
     last_sent = state.setdefault("last_sent", {})
     last_sent[event_type] = time.time()
     save_state(data_dir, state)
+
+
+def watcher_is_running(data_dir: Path) -> bool:
+    pid_file = data_dir / "watcher.pid"
+    try:
+        raw = pid_file.read_text(encoding="ascii").strip()
+        pid = int(raw)
+    except (OSError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        return windows_process_exists(pid)
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def windows_process_exists(pid: int) -> bool:
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+    if not handle:
+        return False
+    kernel32.CloseHandle(handle)
+    return True
 
 
 def recent_session_files(sessions_dir: Path, limit: int = 80) -> list[Path]:
@@ -555,6 +670,45 @@ def save_seen_task_complete_ids(data_dir: Path, seen: set[str]) -> None:
     save_state(data_dir, state)
 
 
+def completion_dedupe_id(payload: dict[str, Any]) -> str:
+    for key in ("turn_id", "completion_id", "task_complete_id"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    parts: list[str] = []
+    for key in ("session_id", "transcript_path", "source_path"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+
+    message = (
+        payload.get("last_agent_message")
+        or payload.get("last_assistant_message")
+        or payload.get("message")
+        or payload.get("task_title")
+    )
+    if isinstance(message, str) and message.strip():
+        parts.append(recover_mojibake_text(message).strip())
+
+    if not parts:
+        return ""
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8", errors="replace")).hexdigest()
+    return f"fingerprint:{digest[:24]}"
+
+
+def completion_seen(data_dir: Path, completion_id: str) -> bool:
+    return bool(completion_id) and completion_id in seen_task_complete_ids(data_dir)
+
+
+def mark_completion_seen(data_dir: Path, completion_id: str) -> None:
+    if not completion_id:
+        return
+    seen = seen_task_complete_ids(data_dir)
+    seen.add(completion_id)
+    save_seen_task_complete_ids(data_dir, seen)
+
+
 def read_task_complete_events_since_offsets(
     sessions_dir: Path,
     offsets: dict[str, int],
@@ -638,7 +792,7 @@ def process_new_task_completes(data_dir: Path, config: dict[str, Any], sessions_
         if event_id in seen:
             continue
         if notify_enabled:
-            last_message = event.get("last_agent_message") or "本轮任务已完成"
+            last_message = recover_mojibake_text(str(event.get("last_agent_message") or "本轮任务已完成"))
             payload = {
                 "task_title": compact_text_summary(str(last_message), 34),
                 "result": "已完成",
@@ -730,13 +884,33 @@ def cmd_hook(args: argparse.Namespace) -> int:
         config = load_config(data_dir)
         payload = read_stdin_json()
         event_type = "test_done" if args.event == "PostToolUse" and is_test_command(payload, config) else args.event
+        completion_id = completion_dedupe_id(payload) if event_type == "Stop" else ""
         if not should_notify(args.event, config, payload):
             append_event(data_dir, {"timestamp": timestamp_iso(), "event_type": args.event, "sent": False, "reason": "disabled"}, config)
             return 0
+        if event_type == "Stop" and watcher_is_running(data_dir):
+            append_event(
+                data_dir,
+                {
+                    "timestamp": timestamp_iso(),
+                    "event_type": event_type,
+                    "sent": False,
+                    "reason": "deferred_to_watcher",
+                    "raw_event": payload,
+                },
+                config,
+            )
+            print(json.dumps({"continue": True}, ensure_ascii=False))
+            return 0
         title, body, level = build_message(event_type, payload, config)
         sent = False
-        if cooldown_allows(data_dir, event_type, config):
+        skipped_reason = ""
+        if completion_id and completion_seen(data_dir, completion_id):
+            skipped_reason = "duplicate_completion"
+        elif cooldown_allows(data_dir, event_type, config):
             sent = send_bark(title, body, level, config.get("notifier", {}))
+            if completion_id:
+                mark_completion_seen(data_dir, completion_id)
             if sent:
                 mark_sent(data_dir, event_type)
         append_event(
@@ -748,6 +922,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
                 "body": body,
                 "level": level,
                 "sent": sent,
+                "reason": skipped_reason,
                 "raw_event": payload,
             },
             config,
