@@ -3,18 +3,27 @@
     "type": "bark",
     "bark_server": "https://api.day.app",
     "bark_key": "",
-    "group": "AgentWatcher",
+    "group": "Codex",
     "default_level": "active",
-    "permission_level": "timeSensitive"
+    "permission_level": "timeSensitive",
+    "icon_url": "https://upload.wikimedia.org/wikipedia/zh/thumb/8/80/OpenAI_Codex_icon.svg/330px-OpenAI_Codex_icon.svg.png",
+    "icon": {
+      "enabled": false,
+      "filename": "",
+      "version": "",
+      "updated_at": ""
+    }
   },
   "notification_policy": {
     "mode": "actionable",
     "notify_on_permission_request": true,
     "notify_on_stop": true,
-    "notify_on_test_done": true,
+    "notify_on_test_done": false,
     "notify_on_consecutive_failures": true,
     "consecutive_failure_threshold": 3,
     "cooldown_seconds": 45,
+    "max_task_complete_age_seconds": 1800,
+    "max_session_file_age_seconds": 604800,
     "test_command_patterns": [
       "npm test",
       "npm run test",
@@ -35,5 +44,30 @@
     "redact_secrets": true,
     "include_cwd": false,
     "include_command_preview": true
+  },
+  "web": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8765,
+    "public_base_url": "",
+    "access_token": ""
+  },
+  "reply_heartbeat": {
+    "enabled": false,
+    "interval_minutes": 0,
+    "applied_interval_minutes": 0,
+    "automation_apply_status": "not_requested",
+    "pending_request_id": "",
+    "automation_id": "",
+    "applied_at": "",
+    "requested_at": "",
+    "auto_pause_minutes": 120,
+    "started_at": "",
+    "expires_at": "",
+    "allowed_intervals": [5, 10, 15, 30, 60],
+    "automation_name": "AgentWatcher 手机回复自动同步"
+  },
+  "remote_interaction": {
+    "mode": "reply"
   }
 }
